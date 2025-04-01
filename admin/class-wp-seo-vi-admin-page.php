@@ -35,10 +35,15 @@ class WP_SEO_VI_Admin_Page {
      * Adds hooks for admin menu and potentially assets.
      */
     public function __construct() {
-        $this->db = new WP_SEO_VI_Database(); // Instantiate the database handler
+        // 根據設定選擇合適的資料庫處理類
+        $this->db = wp_seo_vi_get_db_instance();
+        
         add_action( 'admin_menu', [ $this, 'add_plugin_admin_menu' ] );
         add_action( 'admin_init', [ $this, 'register_settings' ] ); // Register settings
+        add_action( 'admin_init', [ $this, 'process_db_type_form' ] ); // Process DB type form submission
         add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_admin_assets' ] ); // Enqueue scripts
+        
+        // 基本 AJAX 處理函數
         add_action( 'wp_ajax_wp_seo_vi_validate_api_key', [ $this, 'ajax_validate_api_key' ] ); // AJAX handler for validation
         add_action( 'wp_ajax_wp_seo_vi_update_vector', [ $this, 'ajax_update_vector' ] ); // AJAX handler for single update
         add_action( 'wp_ajax_wp_seo_vi_delete_vector', [ $this, 'ajax_delete_vector' ] ); // AJAX handler for single delete
@@ -57,6 +62,10 @@ class WP_SEO_VI_Admin_Page {
         add_action( 'wp_ajax_wp_seo_vi_cancel_check', [ $this, 'ajax_cancel_check' ] );
         add_action( 'wp_ajax_wp_seo_vi_start_secondary_check', [ $this, 'ajax_start_secondary_check' ] );
         add_action( 'wp_ajax_wp_seo_vi_delete_check_record', [ $this, 'ajax_delete_check_record' ] );
+        
+        // 註冊資料遷移相關的AJAX處理器
+        add_action( 'wp_ajax_wp_seo_vi_save_db_type', [ $this, 'ajax_save_db_type' ] );
+        add_action( 'wp_ajax_wp_seo_vi_migrate_data', [ $this, 'ajax_migrate_data' ] );
     }
 
     /**
@@ -841,6 +850,191 @@ class WP_SEO_VI_Admin_Page {
         ]);
     }
     
+    /**
+     * 處理資料庫類型表單提交
+     */
+    public function process_db_type_form() {
+        if (isset($_POST['wp_seo_vi_db_type_submit']) && check_admin_referer('wp_seo_vi_db_type_nonce')) {
+            // 取得表單資料
+            $db_type = isset($_POST['wp_seo_vi_db_type']) ? sanitize_text_field($_POST['wp_seo_vi_db_type']) : '';
+            
+            // 確認資料庫類型是有效的
+            if ($db_type === WP_SEO_VI_DB_TYPE_WPDB || ($db_type === WP_SEO_VI_DB_TYPE_SQLITE && wp_seo_vi_can_use_sqlite())) {
+                // 更新設定
+                update_option('wp_seo_vi_db_type', $db_type);
+                
+                // 如果從 SQLite 切換到 WordPress 資料庫，並且發現需要資料遷移
+                if ($db_type === WP_SEO_VI_DB_TYPE_WPDB && wp_seo_vi_needs_migration()) {
+                    // 添加遷移提示
+                    add_settings_error(
+                        'wp_seo_vi_settings',
+                        'db_type_migration_needed',
+                        __('資料庫類型已更新為 WordPress 資料庫。我們建議您將現有的 SQLite 資料遷移到 WordPress 資料庫。', 'wp-seo-vector-importer'),
+                        'warning'
+                    );
+                } else {
+                    // 一般成功訊息
+                    add_settings_error(
+                        'wp_seo_vi_settings',
+                        'db_type_updated',
+                        __('資料庫類型設定已更新。', 'wp-seo-vector-importer'),
+                        'updated'
+                    );
+                }
+                
+                // 重新整理頁面以顯示 migration 標籤
+                if ($db_type === WP_SEO_VI_DB_TYPE_WPDB && wp_seo_vi_needs_migration()) {
+                    wp_redirect(admin_url('admin.php?page=wp-seo-vi-settings&tab=migration'));
+                    exit;
+                }
+            } else {
+                // 錯誤訊息
+                add_settings_error(
+                    'wp_seo_vi_settings',
+                    'db_type_invalid',
+                    __('無效的資料庫類型或您的伺服器不支援所選的資料庫類型。', 'wp-seo-vector-importer'),
+                    'error'
+                );
+            }
+            
+            // 重新整理頁面以顯示訊息
+            set_transient('settings_errors', get_settings_errors(), 30);
+            wp_redirect(wp_get_referer());
+            exit;
+        }
+    }
+
+    /**
+     * AJAX 處理：保存資料庫類型設定
+     */
+    public function ajax_save_db_type() {
+        check_ajax_referer('wp_seo_vi_db_type_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(__('權限不足。', 'wp-seo-vector-importer'), 403);
+        }
+        
+        $db_type = isset($_POST['db_type']) ? sanitize_text_field($_POST['db_type']) : '';
+        
+        // 確認資料庫類型是有效的
+        if ($db_type === WP_SEO_VI_DB_TYPE_WPDB || ($db_type === WP_SEO_VI_DB_TYPE_SQLITE && wp_seo_vi_can_use_sqlite())) {
+            // 更新設定
+            update_option('wp_seo_vi_db_type', $db_type);
+            
+            // 設置遷移提示
+            if ($db_type === WP_SEO_VI_DB_TYPE_WPDB && wp_seo_vi_needs_migration()) {
+                add_option('wp_seo_vi_show_migration_notice', '1');
+                wp_send_json_success(__('資料庫類型已更新為 WordPress 資料庫。請在遷移標籤中遷移您的資料。', 'wp-seo-vector-importer'));
+            } else {
+                wp_send_json_success(__('資料庫類型設定已更新。', 'wp-seo-vector-importer'));
+            }
+        } else {
+            wp_send_json_error(__('無效的資料庫類型或您的伺服器不支援所選的資料庫類型。', 'wp-seo-vector-importer'));
+        }
+    }
+    
+    /**
+     * AJAX 處理：執行資料遷移
+     */
+    public function ajax_migrate_data() {
+        check_ajax_referer('wp_seo_vi_migration_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(__('權限不足。', 'wp-seo-vector-importer'), 403);
+        }
+        
+        // 檢查是否需要遷移
+        if (!wp_seo_vi_needs_migration()) {
+            wp_send_json_error(__('找不到需要遷移的資料。', 'wp-seo-vector-importer'));
+        }
+        
+        // 取得已處理的表
+        $processed_tables = get_transient('wp_seo_vi_migration_processed_tables');
+        if (!$processed_tables) {
+            $processed_tables = array();
+        }
+        
+        // 需要遷移的表
+        $tables_to_migrate = array(
+            'vectors', 'error_log', 'token_usage', 'duplicate_checks',
+            'duplicate_articles', 'duplicate_groups', 'usage_summary', 'usage_settings'
+        );
+        
+        // 過濾出尚未處理的表
+        $remaining_tables = array_diff($tables_to_migrate, array_keys($processed_tables));
+        
+        // 如果沒有剩餘的表，表示遷移完成
+        if (empty($remaining_tables)) {
+            // 清除暫存
+            delete_transient('wp_seo_vi_migration_processed_tables');
+            // 移除遷移提示
+            delete_option('wp_seo_vi_show_migration_notice');
+            
+            // 計算統計數據
+            $total_records = 0;
+            $records_migrated = 0;
+            $table_stats = array();
+            
+            foreach ($processed_tables as $table => $stats) {
+                $total_records += $stats['total'];
+                $records_migrated += $stats['migrated'];
+                $table_stats[] = array(
+                    'name' => $table,
+                    'total' => $stats['total'],
+                    'migrated' => $stats['migrated'],
+                    'errors' => $stats['errors']
+                );
+            }
+            
+            // 回傳完成訊息
+            wp_send_json_success(array(
+                'done' => true,
+                'progress' => 100,
+                'message' => __('資料遷移完成！', 'wp-seo-vector-importer'),
+                'stats' => array(
+                    'total_records' => $total_records,
+                    'records_migrated' => $records_migrated,
+                    'errors' => count($processed_tables['errors'] ?? array())
+                ),
+                'tableStats' => $table_stats,
+                'db_type_updated' => get_option('wp_seo_vi_db_type') === WP_SEO_VI_DB_TYPE_WPDB
+            ));
+        }
+        
+        // 取得第一個剩餘的表進行處理
+        $current_table = reset($remaining_tables);
+        
+        // 初始化 SQLite 和 WordPress 資料庫實例
+        require_once WP_SEO_VI_PATH . 'includes/class-wp-seo-vi-database.php';
+        require_once WP_SEO_VI_PATH . 'includes/class-wp-seo-vi-wp-database.php';
+        $sqlite_db = new WP_SEO_VI_Database();
+        $wpdb_instance = new WP_SEO_VI_WP_Database();
+        
+        // 執行遷移
+        $result = $wpdb_instance->migrate_from_sqlite($sqlite_db, array($current_table), 50);
+        
+        // 記錄處理結果
+        $processed_tables[$current_table] = array(
+            'total' => $result['total'],
+            'migrated' => $result['migrated'],
+            'errors' => $result['errors']
+        );
+        
+        // 保存已處理的表
+        set_transient('wp_seo_vi_migration_processed_tables', $processed_tables, HOUR_IN_SECONDS);
+        
+        // 計算進度
+        $progress = (count($processed_tables) / count($tables_to_migrate)) * 100;
+        
+        // 回傳進度
+        wp_send_json_success(array(
+            'done' => false,
+            'progress' => round($progress, 1),
+            'message' => sprintf(__('正在遷移 %s 表... (%d/%d)', 'wp-seo-vector-importer'), 
+                $current_table, count($processed_tables), count($tables_to_migrate))
+        ));
+    }
+
     public function enqueue_admin_assets($hook) {
         // 判斷是否為插件頁面
         $plugin_pages = [
@@ -942,10 +1136,24 @@ class WP_SEO_VI_Admin_Page {
             wp_localize_script('wp-seo-vi-settings', 'wpSeoViSettings', [
                 'ajax_url' => admin_url('admin-ajax.php'),
                 'cleanup_nonce' => wp_create_nonce('wp_seo_vi_cleanup_nonce'),
+                'db_type_nonce' => wp_create_nonce('wp_seo_vi_db_type_nonce'),
+                'migration_nonce' => wp_create_nonce('wp_seo_vi_migration_nonce'),
                 'messages' => [
                     'cleanupSuccess' => __('舊的使用記錄已清理！', 'wp-seo-vector-importer'),
                     'cleanupError' => __('清理失敗：', 'wp-seo-vector-importer'),
-                    'confirmCleanup' => __('確定要清理90天之前的使用記錄嗎？此操作無法撤消。', 'wp-seo-vector-importer')
+                    'confirmCleanup' => __('確定要清理90天之前的使用記錄嗎？此操作無法撤消。', 'wp-seo-vector-importer'),
+                    // 資料庫類型相關
+                    'selectDbType' => __('請選擇資料庫類型。', 'wp-seo-vector-importer'),
+                    'dbTypeError' => __('更新資料庫類型失敗：', 'wp-seo-vector-importer'),
+                    // 遷移相關
+                    'confirmMigration' => __('確定要開始資料遷移嗎？此過程可能需要一些時間，請不要關閉此頁面。', 'wp-seo-vector-importer'),
+                    'prepareMigration' => __('正在準備遷移...', 'wp-seo-vector-importer'),
+                    'migrationComplete' => __('資料遷移完成！', 'wp-seo-vector-importer'),
+                    'migrationFailed' => __('遷移失敗', 'wp-seo-vector-importer'),
+                    'migrationSummary' => __('總共有 %s 筆記錄，成功遷移了 %s 筆。', 'wp-seo-vector-importer'),
+                    'noTablesProcessed' => __('沒有處理任何資料表。', 'wp-seo-vector-importer'),
+                    'migrationAgain' => __('再次遷移', 'wp-seo-vector-importer'),
+                    'retryMigration' => __('重試遷移', 'wp-seo-vector-importer')
                 ]
             ]);
         }

@@ -8,7 +8,7 @@ if (!defined('WPINC')) {
     die;
 }
 
-// 獲取設置
+// 獲取設定
 $token_rate = get_option('wp_seo_vi_token_rate', '0.15');
 $budget_limit = get_option('wp_seo_vi_budget_limit', '0');
 $enforce_budget_limit = get_option('wp_seo_vi_enforce_budget_limit', 'no');
@@ -16,11 +16,33 @@ $batch_size = get_option('wp_seo_vi_batch_size', '5');
 
 // 顯示設置錯誤/更新信息
 settings_errors('wp_seo_vi_settings');
+
+// 檢查是否需要資料遷移
+$needs_migration = wp_seo_vi_needs_migration();
+$db_type = wp_seo_vi_get_db_type();
+$can_use_sqlite = wp_seo_vi_can_use_sqlite();
+
+// 取得當前分頁
+$current_tab = isset($_GET['tab']) ? sanitize_key($_GET['tab']) : 'general';
 ?>
 
 <div class="wrap wp-seo-vi-settings-page">
-    <h1><?php _e('OpenAI API 設定', 'wp-seo-vector-importer'); ?></h1>
+    <h1><?php _e('AI向量助手設定', 'wp-seo-vector-importer'); ?></h1>
     
+    <h2 class="nav-tab-wrapper">
+        <a href="?page=wp-seo-vi-settings&tab=general" class="nav-tab <?php echo $current_tab === 'general' ? 'nav-tab-active' : ''; ?>">
+            <?php _e('API設定', 'wp-seo-vector-importer'); ?>
+        </a>
+        <a href="?page=wp-seo-vi-settings&tab=migration" class="nav-tab <?php echo $current_tab === 'migration' ? 'nav-tab-active' : ''; ?> <?php echo $needs_migration ? 'wp-seo-vi-tab-attention' : ''; ?>">
+            <?php _e('資料遷移', 'wp-seo-vector-importer'); ?>
+            <?php if ($needs_migration): ?>
+                <span class="wp-seo-vi-notification-dot"></span>
+            <?php endif; ?>
+        </a>
+    </h2>
+    
+    <?php if ($current_tab === 'general'): ?>
+    <!-- API設定標籤 -->
     <form method="post" action="">
         <?php wp_nonce_field('wp_seo_vi_settings_nonce'); ?>
         <input type="hidden" name="wp_seo_vi_settings_submit" value="1">
@@ -151,12 +173,148 @@ settings_errors('wp_seo_vi_settings');
         
         <?php submit_button(__('保存設定', 'wp-seo-vector-importer')); ?>
     </form>
+
+    <?php elseif ($current_tab === 'migration'): ?>
+    <!-- 資料遷移標籤 -->
+    <div class="wp-seo-vi-settings-section postbox">
+        <h2 class="hndle"><span><?php _e('資料庫類型', 'wp-seo-vector-importer'); ?></span></h2>
+        <div class="inside">
+            <p>
+                <strong><?php _e('目前使用的資料庫類型：', 'wp-seo-vector-importer'); ?></strong>
+                <?php if ($db_type === WP_SEO_VI_DB_TYPE_SQLITE): ?>
+                    <span class="wp-seo-vi-db-type-sqlite"><?php _e('SQLite（存儲在外掛目錄）', 'wp-seo-vector-importer'); ?></span>
+                <?php else: ?>
+                    <span class="wp-seo-vi-db-type-wpdb"><?php _e('WordPress 資料庫', 'wp-seo-vector-importer'); ?></span>
+                <?php endif; ?>
+            </p>
+            
+            <?php if (!$can_use_sqlite): ?>
+                <div class="notice notice-warning">
+                    <p><?php _e('您的伺服器環境不支援 SQLite。請使用 WordPress 資料庫以確保相容性。', 'wp-seo-vector-importer'); ?></p>
+                </div>
+            <?php endif; ?>
+            
+            <?php if ($needs_migration): ?>
+                <div class="notice notice-warning">
+                    <p><?php _e('檢測到 SQLite 資料庫中存在向量資料需要遷移到 WordPress 資料庫。', 'wp-seo-vector-importer'); ?></p>
+                </div>
+            <?php endif; ?>
+            
+            <form method="post" action="" id="wp-seo-vi-db-type-form">
+                <?php wp_nonce_field('wp_seo_vi_db_type_nonce', 'wp_seo_vi_db_type_nonce'); ?>
+                <input type="hidden" name="wp_seo_vi_db_type_submit" value="1">
+                
+                <fieldset>
+                    <legend class="screen-reader-text"><span><?php _e('資料庫類型', 'wp-seo-vector-importer'); ?></span></legend>
+                    <label>
+                        <input type="radio" name="wp_seo_vi_db_type" value="<?php echo WP_SEO_VI_DB_TYPE_WPDB; ?>" <?php checked($db_type, WP_SEO_VI_DB_TYPE_WPDB); ?> <?php disabled(!$can_use_sqlite); ?>>
+                        <?php _e('WordPress 資料庫（推薦）', 'wp-seo-vector-importer'); ?>
+                    </label>
+                    <p class="description"><?php _e('使用 WordPress 的資料庫儲存向量資料，可以避免外掛更新時遺失資料。', 'wp-seo-vector-importer'); ?></p>
+                    
+                    <br>
+                    
+                    <label>
+                        <input type="radio" name="wp_seo_vi_db_type" value="<?php echo WP_SEO_VI_DB_TYPE_SQLITE; ?>" <?php checked($db_type, WP_SEO_VI_DB_TYPE_SQLITE); ?> <?php disabled(!$can_use_sqlite); ?>>
+                        <?php _e('SQLite 資料庫（不推薦）', 'wp-seo-vector-importer'); ?>
+                    </label>
+                    <p class="description"><?php _e('使用 SQLite 資料庫儲存在外掛目錄中，在外掛更新時可能會遺失資料。', 'wp-seo-vector-importer'); ?></p>
+                </fieldset>
+                
+                <?php submit_button(__('保存資料庫設定', 'wp-seo-vector-importer')); ?>
+            </form>
+        </div>
+    </div>
+    
+    <?php if ($needs_migration): ?>
+    <div class="wp-seo-vi-settings-section postbox">
+        <h2 class="hndle"><span><?php _e('資料遷移', 'wp-seo-vector-importer'); ?></span></h2>
+        <div class="inside">
+            <p><?php _e('將您的向量資料從 SQLite 遷移到 WordPress 資料庫，以避免在外掛更新時遺失資料。', 'wp-seo-vector-importer'); ?></p>
+            
+            <div id="wp-seo-vi-migration-form">
+                <?php wp_nonce_field('wp_seo_vi_migration_nonce', 'wp_seo_vi_migration_nonce'); ?>
+                
+                <div id="wp-seo-vi-migration-progress-container" style="display: none; margin: 15px 0;">
+                    <div style="background-color: #eee; border: 1px solid #ccc; padding: 2px;">
+                        <div id="wp-seo-vi-migration-progress-bar" style="background-color: #0073aa; height: 20px; width: 0%; text-align: center; color: white; line-height: 20px;">0%</div>
+                    </div>
+                    <p id="wp-seo-vi-migration-progress-status"></p>
+                </div>
+                
+                <div id="wp-seo-vi-migration-result" style="display: none; margin: 15px 0; padding: 10px; background-color: #f8f8f8; border-left: 4px solid #46b450;">
+                    <h3><?php _e('遷移完成', 'wp-seo-vector-importer'); ?></h3>
+                    <p id="wp-seo-vi-migration-summary"></p>
+                    <table class="widefat" style="margin-top: 10px;">
+                        <thead>
+                            <tr>
+                                <th><?php _e('資料表', 'wp-seo-vector-importer'); ?></th>
+                                <th><?php _e('總記錄數', 'wp-seo-vector-importer'); ?></th>
+                                <th><?php _e('成功遷移', 'wp-seo-vector-importer'); ?></th>
+                                <th><?php _e('錯誤', 'wp-seo-vector-importer'); ?></th>
+                            </tr>
+                        </thead>
+                        <tbody id="wp-seo-vi-migration-details">
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div id="wp-seo-vi-migration-actions">
+                    <p class="submit">
+                        <button type="button" id="wp-seo-vi-start-migration" class="button button-primary">
+                            <?php _e('開始資料遷移', 'wp-seo-vector-importer'); ?>
+                        </button>
+                        <span id="wp-seo-vi-migration-status" style="margin-left: 10px;"></span>
+                    </p>
+                    <p class="description"><?php _e('遷移過程可能需要一些時間，具體取決於您的資料量。請勿關閉此頁面直至遷移完成。', 'wp-seo-vector-importer'); ?></p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
+    
+    <?php endif; ?>
 </div>
 
 <style>
 /* 美化標題，讓其與內容對齊 */
 .wp-seo-vi-settings-section h2.hndle {
     padding-left: 12px;
+}
+
+/* 遷移標籤樣式 */
+.wp-seo-vi-tab-attention {
+    font-weight: bold;
+    position: relative;
+}
+
+.wp-seo-vi-notification-dot {
+    position: absolute;
+    top: 0;
+    right: 0;
+    background-color: #d63638;
+    border-radius: 50%;
+    width: 8px;
+    height: 8px;
+    display: inline-block;
+}
+
+/* 資料庫類型標籤 */
+.wp-seo-vi-db-type-sqlite, .wp-seo-vi-db-type-wpdb {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-weight: bold;
+}
+
+.wp-seo-vi-db-type-sqlite {
+    background-color: #ffecec;
+    color: #d63638;
+}
+
+.wp-seo-vi-db-type-wpdb {
+    background-color: #edfaef;
+    color: #2a9d3f;
 }
 </style>
 
