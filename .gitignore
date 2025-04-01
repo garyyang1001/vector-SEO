@@ -1,0 +1,20 @@
+# 忽略資料庫檔案
+data/vector_store.db
+data/vector_store.db-shm
+data/vector_store.db-wal
+
+# WordPress標準忽略
+*.log
+wp-config.php
+wp-content/advanced-cache.php
+wp-content/backup-db/
+wp-content/backups/
+wp-content/blogs.dir/
+wp-content/cache/
+wp-content/upgrade/
+wp-content/uploads/
+wp-content/wp-cache-config.php
+
+# 系統檔案
+.DS_Store
+Thumbs.db
