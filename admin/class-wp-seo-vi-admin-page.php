@@ -64,8 +64,8 @@ class WP_SEO_VI_Admin_Page {
      */
     public function add_plugin_admin_menu() {
         add_menu_page(
-            __( 'WP SEO Vector Importer', 'wp-seo-vector-importer' ), // Page title
-            __( 'SEO Vector Importer', 'wp-seo-vector-importer' ),    // Menu title
+            __( 'AI向量助手', 'wp-seo-vector-importer' ), // Page title
+            __( 'AI向量助手', 'wp-seo-vector-importer' ),    // Menu title
             'manage_options',                                       // Capability required
             'wp-seo-vector-importer',                               // Menu slug
             [ $this, 'display_plugin_admin_page' ],                 // Function to display the page

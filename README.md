@@ -1,10 +1,10 @@
-# WP SEO Vector Importer (向量SEO優化器)
+# AI向量助手 (Vector AI Assistant)
 
 透過OpenAI的嵌入技術，將WordPress文章轉換為向量資料，提升內容管理和SEO效果。
 
 ## 功能概述
 
-WP SEO Vector Importer 是一款強大的 WordPress 外掛，透過 OpenAI 的向量嵌入技術，幫助站長更智能地管理網站內容：
+AI向量助手是一款強大的 WordPress 外掛，透過 OpenAI 的向量嵌入技術，幫助站長更智能地管理網站內容：
 
 - **向量索引**：將文章轉換為向量資料，使內容可被AI理解和搜尋
 - **重複文章檢測**：自動比對並發現網站中相似度高的文章
@@ -111,7 +111,10 @@ WP SEO Vector Importer 是一款強大的 WordPress 外掛，透過 OpenAI 的�
 
 ## 開發團隊
 
-WP SEO Vector Importer 由AI助手Cline開發，並由GaryYang維護和支持。
+AI向量助手由好事發生數位有限公司開發和維護。
+
+- **網站**: [https://ohya.co](https://ohya.co)
+- **聯絡**: gary@ohya.co
 
 ## 授權資訊
 

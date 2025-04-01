@@ -1,12 +1,12 @@
 
 <?php
 /**
- * Plugin Name:       WP SEO Vector Importer
- * Plugin URI:        #
- * Description:       Imports WordPress post data into a vector database using OpenAI embeddings for SEO analysis and features.
+ * Plugin Name:       AI向量助手
+ * Plugin URI:        https://ohya.co
+ * Description:       透過OpenAI的嵌入技術，將WordPress文章轉換為向量資料，提升內容管理和SEO效果。
  * Version:           0.1.0
- * Author:            Cline (AI Assistant)
- * Author URI:        #
+ * Author:            好事發生數位有限公司
+ * Author URI:        https://ohya.co
  * License:           GPL v2 or later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain:       wp-seo-vector-importer
